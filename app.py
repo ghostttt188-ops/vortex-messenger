@@ -5,7 +5,6 @@ import json
 import uuid
 from datetime import datetime
 import requests
-import eventlet
 from flask import Flask, render_template, request, jsonify, url_for, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_sqlalchemy import SQLAlchemy
@@ -39,7 +38,7 @@ NWS_HEADERS = {
 }
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 
 class UserProfile(db.Model):
@@ -357,7 +356,7 @@ def poll_nws_alerts_once(states=None):
 
 def background_ops_loop():
     while True:
-        eventlet.sleep(90)
+        socketio.sleep(90)
         try:
             poll_nws_alerts_once()
         except Exception:
@@ -393,7 +392,7 @@ def start_background_workers():
     global poller_started
     if not poller_started:
         poller_started = True
-        eventlet.spawn(background_ops_loop)
+        socketio.start_background_task(background_ops_loop)
 
 
 @app.route("/")
