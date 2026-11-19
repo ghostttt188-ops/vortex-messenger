@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
+  <title>Vortex Messenger — Tactical Field Ops</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+  <div id="loginModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="brand-badge">VORTEX OPS • NO PASSCODE</div>
+      <h2>Team Messenger</h2>
+      <p>Enter your spotter callsign to join live comms.</p>
+      <input id="callsignInput" type="text" placeholder="e.g., Ghost-1 (AL)" maxlength="24" autocomplete="off" />
+      <button id="joinBtn" class="btn-primary">Enter Comms</button>
+    </div>
+  </div>
+
+  <div id="newThreadModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>New Chat / Group</h3>
+      <p>Create a convoy channel or 1-on-1 DM thread.</p>
+      <input id="newThreadName" type="text" placeholder="e.g., I-20 Chase Unit or DM: Alex" maxlength="40" />
+      <label class="checkbox-row">
+        <input id="newThreadIsGroup" type="checkbox" checked />
+        <span>Group Channel</span>
+      </label>
+      <div class="modal-actions">
+        <button id="cancelThreadBtn" class="btn-ghost">Cancel</button>
+        <button id="createThreadBtn" class="btn-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fieldReportModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="brand-badge">STRUCTURED DISPATCH</div>
+      <h3>Submit Field Report</h3>
+      <select id="reportPhenomenon" class="modal-select">
+        <option value="Tornado / Funnel Cloud">🌪️ Tornado / Funnel Cloud</option>
+        <option value="Rotating Wall Cloud">🌀 Rotating Wall Cloud</option>
+        <option value="Hail">🧊 Hail</option>
+        <option value="Damaging Wind / Trees Down">💨 Damaging Wind / Trees Down</option>
+        <option value="Flash Flooding / Water Over Road">🌊 Flash Flooding / Water Over Road</option>
+        <option value="Road Blocked / Power Lines">⚠️ Road Blocked / Power Lines</option>
+      </select>
+      <input id="reportMagnitude" type="text" placeholder="Magnitude / Size (e.g., 1.75 in hail, 65 mph)" maxlength="60" />
+      <div class="input-with-btn">
+        <input id="reportLocation" type="text" placeholder="County / City / Hwy (e.g., Talladega Co, US-280)" maxlength="120" />
+        <button type="button" id="fillReportGpsBtn" class="chip-btn" title="Auto-fill GPS">📍 GPS</button>
+      </div>
+      <input id="reportGpsHidden" type="hidden" />
+      <input id="reportNotes" type="text" placeholder="Storm motion, damage details, or visibility..." maxlength="220" />
+      <div class="modal-actions">
+        <button type="button" id="cancelReportBtn" class="btn-ghost">Cancel</button>
+        <button type="button" id="submitReportBtn" class="btn-primary">Dispatch Report</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tacticalMapModal" class="modal-backdrop hidden">
+    <div class="map-modal-card">
+      <div class="map-modal-header">
+        <div>
+          <span class="brand-badge">LIVE TACTICAL MAP</span>
+          <span class="map-legend">🟢 Spotters • 🟠 Field Reports • 🔴 NWS Warnings • 📡 NEXRAD</span>
+        </div>
+        <div class="header-btn-group">
+          <button type="button" id="toggleRadarLayerBtn" class="chip-btn">📡 Radar: ON</button>
+          <button type="button" id="refreshMapBtn" class="chip-btn">↻ Refresh</button>
+          <button type="button" id="closeMapBtn" class="icon-btn" title="Close Map">✕</button>
+        </div>
+      </div>
+      <div id="tacticalMapCanvas" class="tactical-map-canvas"></div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="user-pill">
+          <input type="file" id="avatarInput" accept="image/*" hidden />
+          <button type="button" id="myAvatarBtn" class="avatar-btn" title="Choose profile photo from gallery">
+            <span class="avatar me-avatar" id="myAvatar">VG</span>
+            <span class="avatar-cam-badge">📷</span>
+          </button>
+          <div>
+            <div class="sidebar-title">Chats <span id="adminBadge" class="admin-pill hidden">ADMIN</span></div>
+            <div class="sub-status"><span class="dot-online"></span> <span id="myDisplayName">Connecting...</span></div>
+          </div>
+        </div>
+        <div class="header-btn-group">
+          <button id="fieldLiteBtn" class="icon-btn" title="Toggle Starlink / Low-Bandwidth Field Lite Mode">📶</button>
+          <button id="soundToggleBtn" class="icon-btn" title="Toggle Alert Chime">🔊</button>
+          <button id="openNewThreadBtn" class="icon-btn" title="New Chat">+</button>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <label for="myStatusSelect">Status:</label>
+        <select id="myStatusSelect">
+          <option value="En Route">🚗 En Route</option>
+          <option value="On Storm">🌪️ On Storm</option>
+          <option value="Radar Watch">📡 Radar Watch</option>
+          <option value="🛡️ Sheltered / Safe">🛡️ Sheltered / Safe</option>
+          <option value="Base / Parked">📍 Base / Parked</option>
+        </select>
+      </div>
+
+      <div class="safety-strip">
+        <button type="button" id="safeCheckinBtn" class="safety-btn safe-btn">🛡️ Safe Check-In</button>
+        <button type="button" id="maydayBtn" class="safety-btn mayday-btn">🚨 MAYDAY</button>
+      </div>
+
+      <div class="search-wrap">
+        <input id="threadSearch" type="text" placeholder="Search Messenger..." />
+      </div>
+
+      <div class="online-strip" id="onlineStrip"></div>
+
+      <div id="threadList" class="thread-list"></div>
+    </aside>
+
+    <main class="chat-pane">
+      <header class="chat-header">
+        <div class="chat-header-left">
+          <button id="mobileBackBtn" class="icon-btn mobile-only" title="Chats">←</button>
+          <div class="avatar thread-avatar" id="activeThreadAvatar">#</div>
+          <div>
+            <div id="activeThreadName" class="chat-title">Team Convoy (Main)</div>
+            <div id="activeThreadSub" class="chat-sub">Active now • NWS Auto-Feed</div>
+          </div>
+        </div>
+        <div class="chat-header-actions">
+          <button id="openMapBtn" class="chip-btn map-chip" title="Open Tactical Radar & Spotter Map">🗺️ Map</button>
+          <button id="openReportModalBtn" class="chip-btn report-chip" title="Structured Field Report">📋 Report</button>
+          <button id="shareGpsBtn" class="chip-btn" title="Drop current GPS coordinates">📍 GPS</button>
+          <button id="exportLogBtn" class="icon-btn" title="Export Shift Log (.txt)">⬇</button>
+          <button id="toggleInfoBtn" class="icon-btn" title="Thread Info">ⓘ</button>
+        </div>
+      </header>
+
+      <div id="offlineBanner" class="offline-banner hidden">
+        ⚡ Connection lost — messages queued locally &amp; will send on reconnect
+      </div>
+
+      <div id="fieldLiteBanner" class="lite-banner hidden">
+        📶 Field Lite Mode ON — images &amp; audio paused until tapped to save bandwidth
+      </div>
+
+      <div id="lockedBanner" class="locked-banner hidden">
+        🔒 Channel is locked by Admin — read-only for standard spotters
+      </div>
+
+      <div id="pinnedBanner" class="pinned-banner hidden">
+        <div class="pinned-content">
+          <span class="pin-label">📌 PINNED</span>
+          <span id="pinnedText" class="pinned-text"></span>
+        </div>
+        <button type="button" id="unpinBtn" class="unpin-btn" title="Unpin message">✕</button>
+      </div>
+
+      <div id="messageFeed" class="message-feed"></div>
+
+      <div id="typingBar" class="typing-bar hidden">
+        <span class="typing-dots"><i></i><i></i><i></i></span>
+        <span id="typingText">Someone is typing...</span>
+      </div>
+
+      <div id="replyBar" class="reply-bar hidden">
+        <div class="reply-bar-text">
+          <span>Replying to <strong id="replyTargetSender"></strong>:</span>
+          <span id="replyTargetSnippet" class="reply-snippet"></span>
+        </div>
+        <button type="button" id="cancelReplyBtn" class="unpin-btn" title="Cancel reply">✕</button>
+      </div>
+
+      <form id="composerForm" class="composer">
+        <input type="file" id="imageInput" accept="image/*" hidden />
+        <button type="button" id="attachBtn" class="icon-btn" title="Send Compressed Radar / Photo">📷</button>
+        <button type="button" id="pttBtn" class="icon-btn ptt-btn" title="Hold to Record Push-to-Talk Voice Memo">🎙️</button>
+        <button type="button" id="alertModeBtn" class="icon-btn" title="Toggle Priority Alert">🚨</button>
+        <input id="messageInput" type="text" placeholder="Aa" autocomplete="off" />
+        <button type="submit" id="sendBtn" class="send-btn" title="Send">➤</button>
+      </form>
+    </main>
+
+    <aside id="infoDrawer" class="info-drawer">
+      <div class="info-top">
+        <div class="avatar large-avatar" id="infoAvatar">#</div>
+        <h3 id="infoThreadTitle">Team Convoy (Main)</h3>
+        <span class="badge-live">LIVE FIELD CHANNEL</span>
+      </div>
+
+      <div id="adminControlsSection" class="info-section hidden">
+        <h4>⚡ Admin Command</h4>
+        <div class="quick-grid">
+          <button type="button" id="globalBroadcastBtn" class="quick-msg admin-action-btn">📡 All-Hands Global Broadcast</button>
+          <button type="button" id="toggleLockThreadBtn" class="quick-msg admin-action-btn">🔒 Lock / Unlock This Channel</button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h4>My Profile Photo</h4>
+        <div class="quick-grid">
+          <button type="button" id="drawerChangeAvatarBtn" class="quick-msg">🖼️ Choose Profile Photo from Gallery</button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h4>NWS Auto-Alert Poller</h4>
+        <div class="nws-box">
+          <input id="nwsStatesInput" type="text" value="AL,GA,IN,WI,OH,TN,MS,FL,OK" placeholder="States (e.g. AL,GA,TN)" />
+          <button type="button" id="syncNwsBtn" class="quick-msg nws-sync-btn">🛰️ Sync NWS Warnings Now</button>
+          <div id="nwsSyncStatus" class="nws-status-line">Polls every 90s automatically</div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h4>Active Spotters (<span id="onlineCount">0</span>)</h4>
+        <ul id="onlineRoster" class="roster-list"></ul>
+      </div>
+
+      <div class="info-section">
+        <h4>Dispatch &amp; Exports</h4>
+        <div class="quick-grid">
+          <button type="button" id="exportReportsCsvBtn" class="quick-msg">📊 Export Structured Reports (CSV)</button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h4>Quick Field Broadcasts</h4>
+        <div class="quick-grid">
+          <button class="quick-msg" data-msg="🟢 In position & eyes on sky.">In Position</button>
+          <button class="quick-msg" data-msg="🌪️ Rotating wall cloud / funnel observed!">Funnel / Rotation</button>
+          <button class="quick-msg" data-msg="🧊 Core punching / hail reported on route.">Hail Core</button>
+          <button class="quick-msg" data-msg="⚠️ Road blocked / power lines down.">Road Hazard</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
