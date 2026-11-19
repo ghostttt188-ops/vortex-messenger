@@ -1,7 +1,6 @@
 flask==3.0.3
 flask-socketio==5.3.7
 flask-sqlalchemy==3.1.1
-gevent==24.2.1
 gunicorn==22.0.0
 requests==2.32.3
 werkzeug==3.0.3

@@ -1,3 +1,4 @@
+import time
 import os
 import csv
 import io
@@ -38,7 +39,7 @@ NWS_HEADERS = {
 }
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 
 class UserProfile(db.Model):
@@ -356,7 +357,7 @@ def poll_nws_alerts_once(states=None):
 
 def background_ops_loop():
     while True:
-        socketio.sleep(90)
+        time.sleep(90)
         try:
             poll_nws_alerts_once()
         except Exception:
