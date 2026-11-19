@@ -194,6 +194,9 @@
     </main>
 
     <aside id="infoDrawer" class="info-drawer">
+      <div style="display:flex;justify-content:flex-end;padding:8px 10px 0;">
+        <button type="button" class="icon-btn mobile-only" onclick="document.getElementById('infoDrawer').classList.remove('open-mobile')" title="Close Panel">✕</button>
+      </div>
       <div class="info-top">
         <div class="avatar large-avatar" id="infoAvatar">#</div>
         <h3 id="infoThreadTitle">Team Convoy (Main)</h3>
